@@ -10,6 +10,8 @@ import {
   envelope,
   pagingParams,
   requireSession,
+  requireSuperAdmin,
+  requireUserManager,
   serverError,
   unauthorized,
 } from '@/lib/api-helpers';
@@ -31,6 +33,8 @@ export async function GET(request: NextRequest) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireUserManager(session);
+    if (denied) return denied;
 
     const { page, skip, take, params } = pagingParams(request);
     const query = params.get('query')?.trim();
@@ -74,6 +78,8 @@ export async function POST(request: NextRequest) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireSuperAdmin(session);
+    if (denied) return denied;
 
     const body = await request.json().catch(() => null);
     const parsed = createRoleSchema.safeParse(body);

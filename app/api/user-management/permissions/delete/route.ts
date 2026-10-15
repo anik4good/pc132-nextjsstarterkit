@@ -8,6 +8,7 @@ import {
   requireSession,
   serverError,
   unauthorized,
+  requireSuperAdmin,
 } from '@/lib/api-helpers';
 
 /** Bulk delete of permissions, used by the UI's "delete group" action. */
@@ -15,6 +16,8 @@ export async function DELETE(request: NextRequest) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireSuperAdmin(session);
+    if (denied) return denied;
 
     const body = await request.json().catch(() => null);
     const parsed = z

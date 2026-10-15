@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
+import { getServerSession, Session } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
 /** Response envelope consumed by the DataGrid UI components. */
@@ -52,6 +52,46 @@ export function serverError(error: unknown, route: string) {
 export async function requireSession() {
   const session = await getServerSession(authOptions);
   return session;
+}
+
+/** True when the signed-in user carries a superadmin role (bypasses tenant scoping). */
+export function isSuperAdmin(session: Session | null): boolean {
+  return Boolean(session?.user?.isSuperAdmin);
+}
+
+/** True for roles flagged as company admins (manage users inside their own company). */
+export function isCompanyAdmin(session: Session | null): boolean {
+  return Boolean(session?.user?.isCompanyAdmin);
+}
+
+/** Gate for user-management surfaces: superadmin or company admin. */
+export function canManageUsers(session: Session | null): boolean {
+  return isSuperAdmin(session) || isCompanyAdmin(session);
+}
+
+/** 403 responder for the canManageUsers gate; returns null when allowed. */
+export function requireUserManager(session: Session | null) {
+  if (canManageUsers(session)) return null;
+  return forbidden('User management access required.');
+}
+
+/** Superadmin-only gate: returns a 403 response, or null when the caller may proceed. */
+export function requireSuperAdmin(session: Session | null) {
+  if (isSuperAdmin(session)) return null;
+  return forbidden('Super admin access required.');
+}
+
+/** Filter the caller may read/write outside their company. Superadmins: none. */
+export const IMPOSSIBLE_ID = '00000000-0000-0000-0000-000000000000';
+
+/**
+ * Tenant filter for list queries and ownership checks.
+ * Superadmins get an empty clause (see everything); everyone else is pinned
+ * to their own company — users without a company match nothing.
+ */
+export function tenantScope(session: Session | null): { companyId?: string } {
+  if (isSuperAdmin(session)) return {};
+  return { companyId: session?.user?.companyId ?? IMPOSSIBLE_ID };
 }
 
 /** Shared paging params: ?page=1&limit=10 */

@@ -10,7 +10,13 @@ declare module 'next-auth' {
       avatar?: string | null;
       roleId?: string | null;
       roleName?: string | null;
+      roleSlug?: string | null;
+      isSuperAdmin: boolean;
+      isCompanyAdmin: boolean;
+      companyId?: string | null;
+      companyName?: string | null;
       status: string;
+      impersonatedBy?: string | null;
     };
   }
 
@@ -21,7 +27,13 @@ declare module 'next-auth' {
     avatar?: string | null;
     roleId?: string | null;
     roleName?: string | null;
+    roleSlug?: string | null;
+    isSuperAdmin: boolean;
+    isCompanyAdmin: boolean;
+    companyId?: string | null;
+    companyName?: string | null;
     status: string;
+    impersonatedBy?: string | null;
   }
 }
 
@@ -33,6 +45,12 @@ declare module 'next-auth/jwt' {
     avatar?: string | null;
     roleId?: string | null;
     roleName?: string | null;
+    roleSlug?: string | null;
+    isSuperAdmin: boolean;
+    isCompanyAdmin: boolean;
+    companyId?: string | null;
+    companyName?: string | null;
     status: string;
+    impersonatedBy?: string | null;
   }
 }

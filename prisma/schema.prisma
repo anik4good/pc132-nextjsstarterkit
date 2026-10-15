@@ -8,12 +8,145 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// User Modoule
+// User Module
 enum UserStatus {
   INACTIVE
   ACTIVE
   BLOCKED
 }
+
+// Tenant (SaaS) Module
+enum CompanyStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model Company {
+  id              String        @id @default(uuid())
+  name            String
+  slug            String        @unique
+  description     String?
+  email           String?
+  phone           String?
+  website         String?
+  logo            String?
+  status          CompanyStatus @default(ACTIVE)
+  isTrashed       Boolean       @default(false)
+  createdByUserId String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  users        User[]
+  creator      User?            @relation("CompanyCreator", fields: [createdByUserId], references: [id])
+  settings     CompanySetting?
+  subscription Subscription?
+  attachments  Attachment[]
+  notifications Notification[]
+
+  @@index([status])
+}
+
+// ---- Files module ---------------------------------------------------------
+
+enum AttachmentVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+model Attachment {
+  id            String               @id @default(uuid())
+  companyId     String?
+  uploaderId    String
+  filename      String
+  mimeType      String
+  size          Int
+  storageDriver String               @default("local") // local | s3
+  storageKey    String
+  visibility    AttachmentVisibility @default(PRIVATE)
+  createdAt     DateTime             @default(now())
+
+  company  Company? @relation(fields: [companyId], references: [id])
+  uploader User     @relation("AttachmentUploader", fields: [uploaderId], references: [id])
+  @@index([companyId])
+  @@index([uploaderId])
+}
+
+// ---- Company settings module ----------------------------------------------
+
+model CompanySetting {
+  id          String   @id @default(uuid())
+  companyId   String   @unique
+  timezone    String   @default("UTC")
+  currency    String   @default("USD")
+  locale      String   @default("en")
+  dateFormat  String   @default("MMM D, YYYY")
+  timeFormat  String   @default("hh:mm A")
+  emailFooter String?
+  meta        Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// ---- Notifications module -------------------------------------------------
+
+model Notification {
+  id        String    @id @default(uuid())
+  companyId String?
+  userId    String
+  type      String
+  title     String
+  body      String?
+  link      String?
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  company Company? @relation(fields: [companyId], references: [id])
+  user    User    @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([companyId])
+}
+
+// ---- Billing module -------------------------------------------------------
+
+model Plan {
+  id            String   @id @default(uuid())
+  slug          String   @unique
+  name          String
+  description   String?
+  priceMonthly  Int      @default(0) // cents
+  currency      String   @default("USD")
+  stripePriceId String?
+  maxUsers      Int? // null = unlimited
+  features      Json?
+  isActive      Boolean  @default(true)
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  companyId            String    @unique
+  planId               String
+  status               String    @default("active") // active | trialing | past_due | canceled
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  plan    Plan    @relation(fields: [planId], references: [id])
+
+  @@index([planId])
+}
+
 
 model User {
   id              String      @id @default(uuid())
@@ -23,6 +156,7 @@ model User {
   timezone        String?
   name            String?
   roleId          String
+  companyId       String? // null = platform-level user (superadmin)
   status          UserStatus  @default(INACTIVE) // Status of the invitation
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
@@ -32,14 +166,21 @@ model User {
   avatar          String?
   invitedByUserId String?
   isProtected     Boolean     @default(false) // Prevents deletion/modification
-  role            UserRole    @relation(fields: [roleId], references: [id])
-  systemLog       SystemLog[]
-  accounts        Account[]
-  Session         Session[]
+  role             UserRole      @relation(fields: [roleId], references: [id])
+  company          Company?      @relation(fields: [companyId], references: [id])
+  createdCompanies Company[]     @relation("CompanyCreator")
+  systemLog        SystemLog[]
+  accounts         Account[]
+  Session          Session[]
+  uploads          Attachment[]  @relation("AttachmentUploader")
+  notifications    Notification[] @relation("UserNotifications")
+  impersonationsAudited ImpersonationLog[] @relation("ImpersonationAuditor")
+  impersonationsOf      ImpersonationLog[] @relation("ImpersonationTarget")
 
   // Indexes for efficient querying
   @@index([invitedByUserId])
   @@index([roleId])
+  @@index([companyId])
   @@index([status])
 }
 
@@ -53,6 +194,8 @@ model UserRole {
   createdAt       DateTime             @default(now())
   isProtected     Boolean              @default(false)
   isDefault       Boolean              @default(false)
+  isSuperAdmin    Boolean              @default(false) // Bypasses all tenant scoping
+  isCompanyAdmin  Boolean              @default(false) // Manages users within its own company
   users           User[]
   permissions     UserRolePermission[]
 }
@@ -117,6 +260,7 @@ model VerificationToken {
 model SystemLog {
   id          String   @id @default(uuid())
   userId      String
+  companyId   String? // tenant the action belongs to (null = platform-level)
   createdAt   DateTime @default(now())
   entityId    String?
   entityType  String?
@@ -128,6 +272,7 @@ model SystemLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([companyId])
 }
 
 model SystemSetting {
@@ -167,4 +312,21 @@ model SystemSetting {
   notifySystemErrorFailureEmail  Boolean  @default(true)
   notifySystemErrorWeb           Boolean  @default(true)
   notifySystemErrorRoleIds       String[]
+}
+
+// ---- Impersonation module --------------------------------------------------
+
+model ImpersonationLog {
+  id        String    @id @default(uuid())
+  auditorId String
+  userId    String
+  ipAddress String?
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  auditor User @relation("ImpersonationAuditor", fields: [auditorId], references: [id])
+  user    User @relation("ImpersonationTarget", fields: [userId], references: [id])
+
+  @@index([auditorId])
+  @@index([userId])
 }

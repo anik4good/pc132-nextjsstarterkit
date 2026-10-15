@@ -1,4 +1,5 @@
 import { SystemSetting } from './system';
+import { Company } from './company';
 
 // Enums (mirror Prisma schema UserStatus; avoid $Enums when client is generated without it)
 export const UserStatus = {
@@ -26,6 +27,8 @@ export interface User {
   avatar?: string | null;
   invitedByUserId?: string | null;
   isProtected: boolean;
+  companyId?: string | null;
+  company?: Company | null;
   role: UserRole;
   sessions?: Session[];
   accounts?: Account[];
@@ -41,6 +44,8 @@ export interface UserRole {
   createdAt: Date;
   isProtected: boolean;
   isDefault: boolean;
+  isSuperAdmin: boolean;
+  isCompanyAdmin: boolean;
   createdByUser?: User | null;
   users?: User[];
   permissions?: UserRolePermission[];

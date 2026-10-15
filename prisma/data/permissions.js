@@ -135,6 +135,26 @@ const permissions = [
 		description:
 			'Permission to view and edit all system settings, including general, notifications, and integrations.',
 	},
+	{
+		slug: 'company.view',
+		name: 'View Companies',
+		description: 'Permission to view companies (tenants) in the system.',
+	},
+	{
+		slug: 'company.add',
+		name: 'Add Company',
+		description: 'Permission to add new companies (tenants).',
+	},
+	{
+		slug: 'company.edit',
+		name: 'Edit Company',
+		description: 'Permission to edit companies (tenants).',
+	},
+	{
+		slug: 'company.delete',
+		name: 'Delete Company',
+		description: 'Permission to delete companies (tenants).',
+	},
 ];
 
 module.exports = permissions;

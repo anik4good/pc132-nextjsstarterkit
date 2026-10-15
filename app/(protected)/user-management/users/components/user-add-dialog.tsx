@@ -6,6 +6,7 @@ import { RiCheckboxCircleFill, RiErrorWarningFill } from '@remixicon/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
 import { apiFetch } from '@/lib/api';
 import { Alert, AlertIcon, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -36,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { LoaderCircleIcon } from 'lucide-react';
 import { UserRole } from '@/app/models/user';
+import { useCompanySelectQuery } from '../../companies/hooks/use-company-select-query';
 import { useRoleSelectQuery } from '../../roles/hooks/use-role-select-query';
 import { UserAddSchema, UserAddSchemaType } from '../forms/user-add-schema';
 
@@ -47,9 +49,12 @@ const UserAddDialog = ({
   closeDialog: () => void;
 }) => {
   const queryClient = useQueryClient();
+  const { data: session } = useSession();
+  const isSuperAdmin = !!session?.user?.isSuperAdmin;
 
-  // Fetch available roles
+  // Fetch available roles and companies
   const { data: roleList } = useRoleSelectQuery();
+  const { data: companyList } = useCompanySelectQuery();
 
   const form = useForm<UserAddSchemaType>({
     resolver: zodResolver(UserAddSchema),
@@ -57,6 +62,7 @@ const UserAddDialog = ({
       name: '',
       email: '',
       roleId: '',
+      companyId: '',
     },
     mode: 'onSubmit',
   });
@@ -123,7 +129,11 @@ const UserAddDialog = ({
   const isProcessing = mutation.status === 'pending';
 
   const handleSubmit = (values: UserAddSchemaType) => {
-    mutation.mutate(values);
+    // Company admins never send companyId — the API pins them to their own.
+    const payload = isSuperAdmin
+      ? values
+      : { ...values, companyId: undefined };
+    mutation.mutate(payload);
   };
 
   return (
@@ -190,6 +200,42 @@ const UserAddDialog = ({
                   </FormItem>
                 )}
               />
+              {isSuperAdmin && (
+                <FormField
+                  control={form.control}
+                  name="companyId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Company</FormLabel>
+                      <FormControl>
+                        <Select
+                          onValueChange={(value) => field.onChange(value)}
+                          defaultValue={field.value}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a company" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {companyList?.map(
+                                (company: { id: string; name: string }) => (
+                                  <SelectItem
+                                    key={company.id}
+                                    value={company.id}
+                                  >
+                                    {company.name}
+                                  </SelectItem>
+                                ),
+                              )}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
             </DialogBody>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={closeDialog}>

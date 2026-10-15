@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '@/lib/prisma';
 import { verifyRecaptchaToken } from '@/lib/recaptcha';
 import { getClientIP } from '@/lib/api';
+import { checkIpRateLimit } from '@/lib/rate-limit';
 import { systemLog } from '@/services/system-log';
 import { sendEmail } from '@/services/send-email';
 import { createVerificationToken } from '@/lib/tokens';
@@ -23,6 +24,15 @@ const signupSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Abuse protection: 5 signups per IP per hour.
+    const rate = await checkIpRateLimit(request, 'signup', 5, 3600);
+    if (!rate.ok) {
+      return NextResponse.json(
+        { message: 'Too many signup attempts. Please try again later.' },
+        { status: 429 },
+      );
+    }
+
     const body = await request.json().catch(() => null);
     const parsed = signupSchema.safeParse(body);
 

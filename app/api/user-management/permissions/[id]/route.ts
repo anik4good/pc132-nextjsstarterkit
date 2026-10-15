@@ -10,6 +10,7 @@ import {
   requireSession,
   serverError,
   unauthorized,
+  requireSuperAdmin,
 } from '@/lib/api-helpers';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -32,6 +33,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireSuperAdmin(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 
@@ -78,6 +81,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireSuperAdmin(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 

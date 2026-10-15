@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { redirect } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ColumnDef,
@@ -38,11 +39,14 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { User, UserStatus } from '@/app/models/user';
+import { useCompanySelectQuery } from '../../companies/hooks/use-company-select-query';
 import { useRoleSelectQuery } from '../../roles/hooks/use-role-select-query';
 import { getUserStatusProps, UserStatusProps } from '../constants/status';
 import UserInviteDialog from './user-add-dialog';
 
 const UserList = () => {
+  const { data: session } = useSession();
+  const isSuperAdmin = !!session?.user?.isSuperAdmin;
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
     pageSize: 10,
@@ -54,9 +58,11 @@ const UserList = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>('all');
+  const [selectedCompany, setSelectedCompany] = useState<string | null>('all');
 
-  // Role select query
+  // Role/company select queries
   const { data: roleList } = useRoleSelectQuery();
+  const { data: companyList } = useCompanySelectQuery();
 
   // Fetch users from the server API
   const fetchUsers = async ({
@@ -66,9 +72,11 @@ const UserList = () => {
     searchQuery,
     selectedRole,
     selectedStatus,
+    selectedCompany,
   }: DataGridApiFetchParams & {
     selectedRole: string | null;
     selectedStatus: string | null;
+    selectedCompany: string | null;
   }): Promise<DataGridApiResponse<User>> => {
     const sortField = sorting?.[0]?.id || '';
     const sortDirection = sorting?.[0]?.desc ? 'desc' : 'asc';
@@ -83,6 +91,9 @@ const UserList = () => {
         : {}),
       ...(selectedStatus && selectedStatus !== 'all'
         ? { status: selectedStatus }
+        : {}),
+      ...(isSuperAdmin && selectedCompany && selectedCompany !== 'all'
+        ? { companyId: selectedCompany }
         : {}),
     });
 
@@ -108,6 +119,7 @@ const UserList = () => {
       searchQuery,
       selectedRole,
       selectedStatus,
+      selectedCompany,
     ],
     queryFn: () =>
       fetchUsers({
@@ -117,6 +129,7 @@ const UserList = () => {
         searchQuery,
         selectedRole,
         selectedStatus,
+        selectedCompany,
       }),
     staleTime: Infinity,
     gcTime: 1000 * 60 * 60, // 60 minutes
@@ -132,6 +145,11 @@ const UserList = () => {
 
   const handleStatusSelection = (status: string) => {
     setSelectedStatus(status);
+    setPagination({ ...pagination, pageIndex: 0 });
+  };
+
+  const handleCompanySelection = (companyId: string) => {
+    setSelectedCompany(companyId);
     setPagination({ ...pagination, pageIndex: 0 });
   };
 
@@ -211,6 +229,36 @@ const UserList = () => {
           headerTitle: 'Role',
           skeleton: <Skeleton className="w-28 h-7" />,
         },
+        enableSorting: true,
+        enableHiding: true,
+      },
+      {
+        accessorKey: 'company_name',
+        id: 'company_name',
+        header: ({ column }) => (
+          <DataGridColumnHeader
+            title="Company"
+            visibility={true}
+            column={column}
+          />
+        ),
+        cell: ({ row }) => {
+          const company = row.original.company;
+          if (!company) {
+            return (
+              <Badge variant="outline" appearance="light">
+                Platform
+              </Badge>
+            );
+          }
+
+          return <Badge variant="secondary">{company.name}</Badge>;
+        },
+        meta: {
+          headerTitle: 'Company',
+          skeleton: <Skeleton className="w-28 h-7" />,
+        },
+        size: 150,
         enableSorting: true,
         enableHiding: true,
       },
@@ -309,7 +357,7 @@ const UserList = () => {
         enableResizing: false,
       },
     ],
-    [],
+    [isSuperAdmin],
   );
 
   const [columnOrder, setColumnOrder] = useState<string[]>(
@@ -388,6 +436,28 @@ const UserList = () => {
               ))}
             </SelectContent>
           </Select>
+          {isSuperAdmin && (
+            <Select
+              onValueChange={handleCompanySelection}
+              value={selectedCompany || 'all'}
+              defaultValue="all"
+              disabled={isLoading}
+            >
+              <SelectTrigger className="w-full sm:w-40">
+                <SelectValue placeholder="Filter by company" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All companies</SelectItem>
+                {companyList?.map(
+                  (company: { id: string; name: string }) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
+                    </SelectItem>
+                  ),
+                )}
+              </SelectContent>
+            </Select>
+          )}
           <Select
             onValueChange={handleStatusSelection}
             value={selectedStatus || 'all'}

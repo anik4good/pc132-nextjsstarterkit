@@ -8,5 +8,5 @@ export function getAppUrl(): string {
 }
 
 export function getAppName(): string {
-  return process.env.APP_NAME || 'Root2Tech';
+  return process.env.APP_NAME || 'Next.js Starter Template';
 }

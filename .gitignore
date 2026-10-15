@@ -29,3 +29,6 @@ yarn-error.log*
 
 # prisma
 /prisma/dev.db
+
+# local file-storage uploads (files module)
+.data/

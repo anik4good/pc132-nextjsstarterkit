@@ -60,6 +60,24 @@ const UserHero = ({ user, isLoading }: UserProfileProps) => {
         <div className="space-y-px">
           <div className="font-medium text-base">{user.name}</div>
           <div className="text-muted-foreground text-sm">{user.email}</div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" appearance="light" className="px-2 py-0.5">
+              {user.role?.name || 'Member'}
+            </Badge>
+            {user.company ? (
+              <Badge
+                variant="secondary"
+                appearance="light"
+                className="px-2 py-0.5"
+              >
+                {user.company.name}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="px-2 py-0.5">
+                Platform
+              </Badge>
+            )}
+          </div>
           <div>
             <TooltipProvider>
               <Tooltip delayDuration={50}>

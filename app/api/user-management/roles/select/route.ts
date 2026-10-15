@@ -1,15 +1,27 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireSession, serverError, unauthorized } from '@/lib/api-helpers';
+import {
+  isSuperAdmin,
+  requireSession,
+  requireUserManager,
+  serverError,
+  unauthorized,
+} from '@/lib/api-helpers';
 
-/** Lightweight [{ id, name }] list for dropdowns and filters. */
-export async function GET() {
+/** Lightweight [{ id, name }] list for dropdowns and filters.
+ *  Company admins never see the super admin role — they cannot assign it. */
+export async function GET(request: NextRequest) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireUserManager(session);
+    if (denied) return denied;
 
     const roles = await prisma.userRole.findMany({
-      where: { isTrashed: false },
+      where: {
+        isTrashed: false,
+        ...(isSuperAdmin(session) ? {} : { isSuperAdmin: false }),
+      },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });

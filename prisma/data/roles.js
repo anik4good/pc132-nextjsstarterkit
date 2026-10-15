@@ -3,7 +3,8 @@ const roles = [
 		slug: 'admin',
 		isProtected: true,
 		name: 'Administrator',
-		description: 'Administrator with full access to manage the system.',
+		description:
+			'Company administrator: manages users and settings within their own company.',
 	},
 	{
 		slug: 'manager',
@@ -30,7 +31,6 @@ const roles = [
 	{
 		slug: 'customer',
 		name: 'Customer',
-		isDefault: true,
 		description:
 			'Registered customer with access to purchase products and view their orders.',
 	},

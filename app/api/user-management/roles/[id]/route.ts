@@ -9,6 +9,7 @@ import {
   forbidden,
   notFound,
   requireSession,
+  requireSuperAdmin,
   serverError,
   unauthorized,
 } from '@/lib/api-helpers';
@@ -34,11 +35,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireSuperAdmin(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 
     const role = await prisma.userRole.findUnique({ where: { id } });
     if (!role) return notFound('Role not found.');
+    if (role.isSuperAdmin) {
+      return forbidden('The super admin role cannot be modified.');
+    }
     if (role.isProtected) {
       return forbidden('This role is protected and cannot be modified.');
     }
@@ -104,6 +110,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireSuperAdmin(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 
@@ -112,6 +120,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       include: { _count: { select: { users: true } } },
     });
     if (!role) return notFound('Role not found.');
+    if (role.isSuperAdmin) {
+      return forbidden('The super admin role cannot be deleted.');
+    }
     if (role.isProtected) {
       return forbidden('This role is protected and cannot be deleted.');
     }

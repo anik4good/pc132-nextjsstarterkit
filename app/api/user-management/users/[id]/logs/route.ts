@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
   envelope,
+  forbidden,
+  isSuperAdmin,
   notFound,
   pagingParams,
   requireSession,
@@ -12,7 +14,9 @@ import {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-/** Activity (system) logs for a single user, newest first. */
+/** Activity (system) logs for a single user, newest first.
+ *  Users may always read their own logs; managers may read logs of users
+ *  inside their company; superadmins may read anyone's. */
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
@@ -20,8 +24,24 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { id } = await context.params;
 
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, companyId: true, role: { select: { isSuperAdmin: true } } },
+    });
     if (!user) return notFound('User not found.');
+
+    const isSelf = session.user.id === id;
+    if (!isSelf) {
+      if (user.role.isSuperAdmin && !isSuperAdmin(session)) {
+        return forbidden('Not allowed.');
+      }
+      if (
+        !isSuperAdmin(session) &&
+        user.companyId !== session.user.companyId
+      ) {
+        return notFound('User not found.');
+      }
+    }
 
     const { page, skip, take } = pagingParams(request);
 

@@ -12,6 +12,8 @@ export const UserAddSchema = z.object({
   roleId: z.string().nonempty({
     message: 'Role ID is required.',
   }),
+  // Superadmins choose the company; other managers are scoped server-side.
+  companyId: z.string().optional(),
 });
 
 export type UserAddSchemaType = z.infer<typeof UserAddSchema>;

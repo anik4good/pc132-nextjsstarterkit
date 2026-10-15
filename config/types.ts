@@ -14,6 +14,8 @@ export interface MenuItem {
   expandTitle?: string;
   badge?: string;
   separator?: boolean;
+  /** Role slugs allowed to see this entry; omit for everyone. */
+  roles?: string[];
 }
 
 export type MenuConfig = MenuItem[];

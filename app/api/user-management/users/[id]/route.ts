@@ -7,8 +7,10 @@ import { systemLog } from '@/services/system-log';
 import {
   badRequest,
   forbidden,
+  isSuperAdmin,
   notFound,
   requireSession,
+  requireUserManager,
   serverError,
   unauthorized,
 } from '@/lib/api-helpers';
@@ -20,6 +22,7 @@ const USER_SAFE_SELECT = {
   country: true,
   timezone: true,
   roleId: true,
+  companyId: true,
   status: true,
   createdAt: true,
   updatedAt: true,
@@ -29,15 +32,44 @@ const USER_SAFE_SELECT = {
   avatar: true,
   invitedByUserId: true,
   isProtected: true,
-  role: { select: { id: true, name: true, slug: true } },
+  role: { select: { id: true, name: true, slug: true, isSuperAdmin: true } },
+  company: { select: { id: true, name: true, slug: true } },
 } satisfies Prisma.UserSelect;
 
 type RouteContext = { params: Promise<{ id: string }> };
+
+type TargetUser = {
+  id: string;
+  email: string;
+  companyId: string | null;
+  role: { isSuperAdmin: boolean };
+};
+
+/**
+ * Tenant check for a specific target user: company admins may only act on
+ * users of their own company and never on superadmins. Returns a 403/404
+ * response or null when allowed.
+ */
+function checkTargetAccess(
+  session: NonNullable<Awaited<ReturnType<typeof requireSession>>>,
+  target: TargetUser,
+) {
+  if (isSuperAdmin(session)) return null;
+  if (target.role.isSuperAdmin) {
+    return forbidden('Super admin users can only be managed by super admins.');
+  }
+  if (target.companyId !== session.user.companyId) {
+    return notFound('User not found.');
+  }
+  return null;
+}
 
 export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireUserManager(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 
@@ -47,6 +79,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     });
 
     if (!user) return notFound('User not found.');
+    const accessDenied = checkTargetAccess(session, user);
+    if (accessDenied) return accessDenied;
 
     return NextResponse.json(user);
   } catch (error) {
@@ -58,20 +92,28 @@ const updateUserSchema = z.object({
   name: z.string().trim().min(2).max(50),
   roleId: z.string().min(1),
   status: z.enum(['INACTIVE', 'ACTIVE', 'BLOCKED']),
+  avatar: z.string().trim().max(500).optional().or(z.literal('')),
 });
 
 export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireUserManager(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { role: { select: { isSuperAdmin: true } } },
+    });
     if (!user) return notFound('User not found.');
     if (user.isProtected) {
       return forbidden('This user is protected and cannot be modified.');
     }
+    const accessDenied = checkTargetAccess(session, user);
+    if (accessDenied) return accessDenied;
 
     const body = await request.json().catch(() => null);
     const parsed = updateUserSchema.safeParse(body);
@@ -85,6 +127,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (!role || role.isTrashed) {
       return badRequest('Selected role does not exist.');
     }
+    if (!isSuperAdmin(session) && role.isSuperAdmin) {
+      return forbidden('You cannot assign a super admin role.');
+    }
 
     const updated = await prisma.user.update({
       where: { id },
@@ -95,6 +140,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     await systemLog({
       event: 'USER_UPDATED',
       userId: session.user.id,
+      companyId: updated.companyId,
       entityId: id,
       entityType: 'User',
       description: `Updated user ${user.email}`,
@@ -111,6 +157,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireUserManager(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 
@@ -118,11 +166,16 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       return badRequest('You cannot delete your own account.');
     }
 
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { role: { select: { isSuperAdmin: true } } },
+    });
     if (!user) return notFound('User not found.');
     if (user.isProtected) {
       return forbidden('This user is protected and cannot be deleted.');
     }
+    const accessDenied = checkTargetAccess(session, user);
+    if (accessDenied) return accessDenied;
 
     if (!user.isTrashed) {
       // Soft delete: keep the record for restore / audit.
@@ -134,6 +187,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       await systemLog({
         event: 'USER_TRASHED',
         userId: session.user.id,
+        companyId: user.companyId,
         entityId: id,
         entityType: 'User',
         description: `Moved user ${user.email} to trash`,
@@ -149,6 +203,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     await systemLog({
       event: 'USER_DELETED',
       userId: session.user.id,
+      companyId: user.companyId,
       entityId: id,
       entityType: 'User',
       description: `Permanently deleted user ${user.email}`,

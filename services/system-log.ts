@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 export interface SystemLogProps {
   event: string;
   userId: string;
+  companyId?: string | null;
   entityId?: string;
   entityType?: string;
   description?: string;
@@ -15,6 +16,7 @@ export async function systemLog(
   {
     event,
     userId,
+    companyId,
     entityId,
     entityType,
     description,
@@ -31,6 +33,7 @@ export async function systemLog(
       data: {
         event,
         userId,
+        companyId,
         entityId,
         entityType,
         description,

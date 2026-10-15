@@ -5,6 +5,7 @@ import { verifyRecaptchaToken } from '@/lib/recaptcha';
 import { createVerificationToken } from '@/lib/tokens';
 import { sendEmail } from '@/services/send-email';
 import { getAppUrl, getAppName } from '@/lib/app-url';
+import { checkIpRateLimit } from '@/lib/rate-limit';
 
 const schema = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -12,6 +13,15 @@ const schema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Abuse protection: 5 reset requests per IP per hour.
+    const rate = await checkIpRateLimit(request, 'reset-password', 5, 3600);
+    if (!rate.ok) {
+      return NextResponse.json(
+        { message: 'Too many reset attempts. Please try again later.' },
+        { status: 429 },
+      );
+    }
+
     const body = await request.json().catch(() => null);
     const parsed = schema.safeParse(body);
 

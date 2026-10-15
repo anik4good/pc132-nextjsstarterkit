@@ -3,8 +3,11 @@ import { prisma } from '@/lib/prisma';
 import { getClientIP } from '@/lib/api';
 import { systemLog } from '@/services/system-log';
 import {
+  forbidden,
+  isSuperAdmin,
   notFound,
   requireSession,
+  requireUserManager,
   serverError,
   unauthorized,
 } from '@/lib/api-helpers';
@@ -15,11 +18,26 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireUserManager(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 
-    const user = await prisma.user.findUnique({ where: { id } });
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { role: { select: { isSuperAdmin: true } } },
+    });
     if (!user) return notFound('User not found.');
+    if (!isSuperAdmin(session)) {
+      if (user.role.isSuperAdmin) {
+        return forbidden(
+          'Super admin users can only be managed by super admins.',
+        );
+      }
+      if (user.companyId !== session.user.companyId) {
+        return notFound('User not found.');
+      }
+    }
 
     const updated = await prisma.user.update({
       where: { id },
@@ -29,6 +47,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     await systemLog({
       event: 'USER_RESTORED',
       userId: session.user.id,
+      companyId: updated.companyId,
       entityId: id,
       entityType: 'User',
       description: `Restored user ${updated.email} from trash`,

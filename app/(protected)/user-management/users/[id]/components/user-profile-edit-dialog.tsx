@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { RiCheckboxCircleFill, RiErrorWarningFill } from '@remixicon/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { apiFetch } from '@/lib/api';
+import { uploadFile } from '@/hooks/use-server-upload';
 import {
   Alert,
   AlertDescription,
@@ -30,6 +31,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Select,
   SelectContent,
@@ -39,6 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { LoaderCircleIcon } from 'lucide-react';
+import { getInitials } from '@/lib/helpers';
 import { User, UserRole } from '@/app/models/user';
 import { useRoleSelectQuery } from '../../../roles/hooks/use-role-select-query';
 import { UserStatusProps } from '../../constants/status';
@@ -138,8 +141,50 @@ const UserProfileEditDialog = ({
 
   const isProcessing = mutation.status === 'pending';
 
-  const handleSubmit = (values: UserProfileSchemaType) => {
-    mutation.mutate(values);
+  const handleSubmit = async (values: UserProfileSchemaType) => {
+    mutation.mutate({
+      ...values,
+      ...(avatarUrl !== null ? { avatar: avatarUrl } : {}),
+    });
+  };
+
+  // ---- Avatar upload -----------------------------------------------------
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsUploadingAvatar(true);
+    try {
+      const attachment = await uploadFile(file, {
+        directory: 'avatars',
+        visibility: 'PUBLIC',
+      });
+      setAvatarUrl(attachment.url);
+      setAvatarPreview(attachment.url);
+    } catch (error) {
+      toast.custom(
+        () => (
+          <Alert variant="mono" icon="destructive" close={false}>
+            <AlertIcon>
+              <RiErrorWarningFill />
+            </AlertIcon>
+            <AlertTitle>
+              {error instanceof Error ? error.message : 'Upload failed.'}
+            </AlertTitle>
+          </Alert>
+        ),
+        { position: 'top-center' },
+      );
+    } finally {
+      setIsUploadingAvatar(false);
+      if (avatarInputRef.current) avatarInputRef.current.value = '';
+    }
   };
 
   return (
@@ -158,6 +203,43 @@ const UserProfileEditDialog = ({
                 <AlertDescription>{mutation.error.message}</AlertDescription>
               </Alert>
             )}
+            <div className="flex items-center gap-3">
+              <Avatar className="size-14">
+                {avatarPreview || user.avatar ? (
+                  <AvatarImage
+                    src={avatarPreview || user.avatar || ''}
+                    alt={user.name || ''}
+                  />
+                ) : null}
+                <AvatarFallback className="text-lg">
+                  {getInitials(user.name || user.email)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="space-y-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isUploadingAvatar}
+                  onClick={() => avatarInputRef.current?.click()}
+                >
+                  {isUploadingAvatar && (
+                    <LoaderCircleIcon className="size-4 animate-spin" />
+                  )}
+                  {avatarPreview ? 'Change avatar' : 'Upload avatar'}
+                </Button>
+                <p className="text-muted-foreground text-xs">
+                  Images only, up to 10MB. Stored via the files module.
+                </p>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+              </div>
+            </div>
             <FormField
               control={form.control}
               name="name"

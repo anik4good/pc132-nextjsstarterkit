@@ -24,6 +24,12 @@ import { Icons } from '@/components/common/icons';
 import { getSigninSchema, SigninSchemaType } from '../forms/signin-schema';
 import { safeCallbackUrl } from '@/lib/post-auth-redirect';
 
+const demoAccounts = [
+  { label: 'Super Admin', email: 'owner@kt.com', password: 'Owner#12345' },
+  { label: 'Demo', email: 'demo@kt.com', password: 'Demo#12345' },
+  { label: 'Company Admin', email: 'admin@acme.com', password: 'Admin#12345' },
+];
+
 export function SignInForm({
   appName,
   googleEnabled,
@@ -49,6 +55,12 @@ export function SignInForm({
       rememberMe: false,
     },
   });
+
+  function fillDemoAccount(account: (typeof demoAccounts)[number]) {
+    form.setValue('email', account.email, { shouldValidate: false });
+    form.setValue('password', account.password, { shouldValidate: false });
+    setError(null);
+  }
 
   async function onSubmit(values: SigninSchemaType) {
     setIsProcessing(true);
@@ -214,6 +226,29 @@ export function SignInForm({
             ) : null}
             Continue
           </Button>
+        </div>
+
+        <div className="rounded-lg border border-dashed bg-muted/40 p-3 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground text-center">
+            Demo accounts — click to autofill
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {demoAccounts.map((account) => (
+              <Button
+                key={account.email}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fillDemoAccount(account)}
+                className="h-auto flex-col gap-0.5 py-2"
+              >
+                <span className="text-xs font-semibold">{account.label}</span>
+                <span className="text-[11px] font-normal text-muted-foreground">
+                  {account.email}
+                </span>
+              </Button>
+            ))}
+          </div>
         </div>
 
         <p className="text-sm text-muted-foreground text-center">

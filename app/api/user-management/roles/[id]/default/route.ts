@@ -6,6 +6,7 @@ import {
   badRequest,
   notFound,
   requireSession,
+  requireSuperAdmin,
   serverError,
   unauthorized,
 } from '@/lib/api-helpers';
@@ -17,12 +18,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const session = await requireSession();
     if (!session) return unauthorized();
+    const denied = requireSuperAdmin(session);
+    if (denied) return denied;
 
     const { id } = await context.params;
 
     const role = await prisma.userRole.findUnique({ where: { id } });
     if (!role) return notFound('Role not found.');
     if (role.isTrashed) return badRequest('This role is trashed.');
+    if (role.isSuperAdmin) {
+      return badRequest('The super admin role cannot be the default signup role.');
+    }
 
     await prisma.$transaction([
       prisma.userRole.updateMany({ data: { isDefault: false } }),

@@ -4,6 +4,7 @@ import GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import bcrypt from 'bcrypt';
 import { prisma } from '@/lib/prisma';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { systemLog } from '@/services/system-log';
 
 /** NextAuth surfaces provider errors as JSON strings — the sign-in form parses them. */
@@ -55,9 +56,17 @@ export const authOptions: NextAuthOptions = {
           throw authError('Email and password are required.');
         }
 
+        // Brute-force protection: 10 sign-in attempts per IP per 5 minutes.
+        const rate = await checkRateLimit(requestIp(req), 'login', 10, 300);
+        if (!rate.ok) {
+          throw authError(
+            'Too many sign-in attempts. Please try again in a few minutes.',
+          );
+        }
+
         const user = await prisma.user.findUnique({
           where: { email },
-          include: { role: true },
+          include: { role: true, company: true },
         });
 
         if (!user || !user.password) {
@@ -90,6 +99,7 @@ export const authOptions: NextAuthOptions = {
         await systemLog({
           event: 'SIGNIN',
           userId: user.id,
+          companyId: user.companyId,
           entityType: 'User',
           entityId: user.id,
           description: 'User signed in with email and password',
@@ -103,6 +113,11 @@ export const authOptions: NextAuthOptions = {
           avatar: user.avatar ?? null,
           roleId: user.roleId,
           roleName: user.role?.name ?? null,
+          roleSlug: user.role?.slug ?? null,
+          isSuperAdmin: user.role?.isSuperAdmin ?? false,
+          isCompanyAdmin: user.role?.isCompanyAdmin ?? false,
+          companyId: user.companyId ?? null,
+          companyName: user.company?.name ?? null,
           status: user.status,
         };
       },
@@ -117,6 +132,11 @@ export const authOptions: NextAuthOptions = {
         token.avatar = user.avatar ?? null;
         token.roleId = user.roleId ?? null;
         token.roleName = user.roleName ?? null;
+        token.roleSlug = user.roleSlug ?? null;
+        token.isSuperAdmin = user.isSuperAdmin ?? false;
+        token.isCompanyAdmin = user.isCompanyAdmin ?? false;
+        token.companyId = user.companyId ?? null;
+        token.companyName = user.companyName ?? null;
         token.status = user.status ?? 'INACTIVE';
       }
       return token;
@@ -129,7 +149,13 @@ export const authOptions: NextAuthOptions = {
         session.user.avatar = (token.avatar as string | null) ?? null;
         session.user.roleId = (token.roleId as string | null) ?? null;
         session.user.roleName = (token.roleName as string | null) ?? null;
+        session.user.roleSlug = (token.roleSlug as string | null) ?? null;
+        session.user.isSuperAdmin = (token.isSuperAdmin as boolean) ?? false;
+        session.user.isCompanyAdmin = (token.isCompanyAdmin as boolean) ?? false;
+        session.user.companyId = (token.companyId as string | null) ?? null;
+        session.user.companyName = (token.companyName as string | null) ?? null;
         session.user.status = token.status as string;
+        session.user.impersonatedBy = (token.impersonatedBy as string | null) ?? null;
       }
       return session;
     },

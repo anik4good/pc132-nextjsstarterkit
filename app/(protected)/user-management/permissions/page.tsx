@@ -15,6 +15,7 @@ import {
   ToolbarTitle,
 } from '@/components/common/toolbar';
 import PermissionList from './components/permission-list';
+import { requireSuperAdminPage } from '@/lib/page-guards';
 
 export const metadata: Metadata = {
   title: 'Permissions',
@@ -22,6 +23,8 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
+  await requireSuperAdminPage();
+
   return (
     <>
       <Container>

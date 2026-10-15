@@ -15,6 +15,7 @@ import {
   ToolbarTitle,
 } from '@/components/common/toolbar';
 import UserList from './components/user-list';
+import { requireUserManagerPage } from '@/lib/page-guards';
 
 export const metadata: Metadata = {
   title: 'Users',
@@ -22,6 +23,8 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
+  await requireUserManagerPage();
+
   return (
     <>
       <Container>

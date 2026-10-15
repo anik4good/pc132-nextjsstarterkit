@@ -18,8 +18,8 @@ import '@/components/keenicons/assets/styles.css';
 
 export const metadata: Metadata = {
   title: {
-    template: `%s | ${process.env.APP_NAME || 'Root2Tech'}`,
-    default: process.env.APP_NAME || 'Root2Tech',
+    template: `%s | ${process.env.APP_NAME || 'Next.js Starter Template'}`,
+    default: process.env.APP_NAME || 'Next.js Starter Template',
   }
 };
 

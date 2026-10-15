@@ -18,6 +18,9 @@ export async function AdminLayout({
         email: session?.user?.email,
         avatar: session?.user?.avatar,
         roleName: session?.user?.roleName,
+        roleSlug: session?.user?.roleSlug,
+        companyName: session?.user?.companyName,
+        impersonatedBy: session?.user?.impersonatedBy,
       }}
     >
       {children}
